@@ -3,4 +3,4 @@
 
 2.Скачать папку проекта 
 
-3.Запустить bucket_sort_visualizer.py
+3.Запустить main.py
