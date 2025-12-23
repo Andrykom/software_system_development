@@ -1,6 +1,5 @@
 
 def bucket_sort(arr, num_buckets=None):
-    """Bucket sort с insertion sort для точного соответствия теории."""
     if not arr:
         return []
     
@@ -45,7 +44,6 @@ def bucket_sort(arr, num_buckets=None):
 
 
 def real_insertion_sort(arr):
-    """Настоящая сортировка вставками на Python для точных измерений."""
     for i in range(1, len(arr)):
         key = arr[i]
         j = i - 1

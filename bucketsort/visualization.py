@@ -2,6 +2,7 @@
 GUI приложение для визуализации алгоритма Bucket Sort.
 
 Использует Tkinter для создания графического интерфейса с анимацией процесса сортировки.
+Включает систему авторизации и сохранение истории сортировок в базе данных.
 """
 
 import tkinter as tk
@@ -10,6 +11,8 @@ import random
 import threading
 import time
 from bucket_sort_visualizer import bucket_sort_with_steps
+from bucket_sort import bucket_sort
+from auth import AuthManager
 
 
 class BucketSortVisualizer:
@@ -20,30 +23,181 @@ class BucketSortVisualizer:
     def __init__(self, root):
         self.root = root
         self.root.title("Визуализация Bucket Sort")
-        self.root.geometry("1200x800")
+        self.root.geometry("1200x850")
         self.root.configure(bg='#f0f0f0')
+        
+        # Менеджер аутентификации
+        self.auth_manager = AuthManager()
         
         # Данные
         self.original_array = []
+        self.sorted_array = None
         self.current_state = None
         self.steps_generator = None
         self.is_playing = False
-        self.speed = 1000  # миллисекунды между шагами (инвертировано: больше значение = быстрее)
+        self.speed = 1000  # миллисекунды между шагами
+        
+        # Показываем окно авторизации при запуске
+        self.show_login_dialog()
         
         # Создаем интерфейс
         self.create_widgets()
+    
+    def show_login_dialog(self):
+        """Показывает диалог авторизации."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Авторизация")
+        dialog.geometry("400x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg='#f0f0f0')
+        dialog.resizable(False, False)
         
-    def create_widgets(self):
-        """Создает элементы интерфейса."""
+        # Центрируем окно
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (400 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (300 // 2)
+        dialog.geometry(f"400x300+{x}+{y}")
+        
         # Заголовок
         title_label = tk.Label(
-            self.root,
-            text="ВИЗУАЛИЗАЦИЯ АЛГОРИТМА BUCKET SORT",
+            dialog,
+            text="Вход в систему",
             font=('Arial', 16, 'bold'),
             bg='#f0f0f0',
             fg='#333'
         )
-        title_label.pack(pady=10)
+        title_label.pack(pady=20)
+        
+        # Поля ввода
+        input_frame = tk.Frame(dialog, bg='#f0f0f0')
+        input_frame.pack(pady=20, padx=30, fill='x')
+        
+        tk.Label(input_frame, text="Имя пользователя:", font=('Arial', 10), bg='#f0f0f0').pack(anchor='w', pady=5)
+        username_entry = tk.Entry(input_frame, font=('Arial', 12), width=30)
+        username_entry.pack(fill='x', pady=5)
+        username_entry.focus()
+        
+        tk.Label(input_frame, text="Пароль:", font=('Arial', 10), bg='#f0f0f0').pack(anchor='w', pady=5)
+        password_entry = tk.Entry(input_frame, font=('Arial', 12), width=30, show='*')
+        password_entry.pack(fill='x', pady=5)
+        
+        def login():
+            username = username_entry.get().strip()
+            password = password_entry.get()
+            if not username or not password:
+                messagebox.showerror("Ошибка", "Заполните все поля!")
+                return
+            
+            success, msg = self.auth_manager.login(username, password)
+            if success:
+                dialog.destroy()
+                self.update_auth_status()
+                messagebox.showinfo("Успех", msg)
+            else:
+                messagebox.showerror("Ошибка", msg)
+        
+        def register():
+            username = username_entry.get().strip()
+            password = password_entry.get()
+            if not username or not password:
+                messagebox.showerror("Ошибка", "Заполните все поля!")
+                return
+            
+            success, msg = self.auth_manager.register(username, password)
+            if success:
+                messagebox.showinfo("Успех", msg)
+                # Автоматически входим после регистрации
+                success, msg = self.auth_manager.login(username, password)
+                if success:
+                    dialog.destroy()
+                    self.update_auth_status()
+                    messagebox.showinfo("Успех", f"Добро пожаловать, {username}!")
+            else:
+                messagebox.showerror("Ошибка", msg)
+        
+        # Кнопки
+        button_frame = tk.Frame(dialog, bg='#f0f0f0')
+        button_frame.pack(pady=20)
+        
+        tk.Button(
+            button_frame,
+            text="Войти",
+            command=login,
+            bg='#4CAF50',
+            fg='white',
+            font=('Arial', 11, 'bold'),
+            padx=20,
+            pady=8
+        ).pack(side='left', padx=5)
+        
+        tk.Button(
+            button_frame,
+            text="Регистрация",
+            command=register,
+            bg='#2196F3',
+            fg='white',
+            font=('Arial', 11),
+            padx=20,
+            pady=8
+        ).pack(side='left', padx=5)
+        
+        password_entry.bind('<Return>', lambda e: login())
+        username_entry.bind('<Return>', lambda e: password_entry.focus())
+    
+    def create_widgets(self):
+        """Создает элементы интерфейса."""
+        # Верхняя панель с авторизацией
+        top_frame = tk.Frame(self.root, bg='#e0e0e0', relief='raised', bd=2)
+        top_frame.pack(fill='x', padx=0, pady=0)
+        
+        # Заголовок
+        title_label = tk.Label(
+            top_frame,
+            text="ВИЗУАЛИЗАЦИЯ АЛГОРИТМА BUCKET SORT",
+            font=('Arial', 16, 'bold'),
+            bg='#e0e0e0',
+            fg='#333'
+        )
+        title_label.pack(side='left', padx=20, pady=10)
+        
+        # Панель авторизации
+        auth_frame = tk.Frame(top_frame, bg='#e0e0e0')
+        auth_frame.pack(side='right', padx=20, pady=10)
+        
+        self.auth_status_label = tk.Label(
+            auth_frame,
+            text="Не авторизован",
+            font=('Arial', 10),
+            bg='#e0e0e0',
+            fg='#666'
+        )
+        self.auth_status_label.pack(side='left', padx=10)
+        
+        self.login_button = tk.Button(
+            auth_frame,
+            text="Войти",
+            command=self.show_login_dialog,
+            bg='#4CAF50',
+            fg='white',
+            font=('Arial', 9),
+            padx=10,
+            pady=3
+        )
+        self.login_button.pack(side='left', padx=2)
+        
+        self.logout_button = tk.Button(
+            auth_frame,
+            text="Выйти",
+            command=self.logout,
+            bg='#F44336',
+            fg='white',
+            font=('Arial', 9),
+            padx=10,
+            pady=3,
+            state='disabled'
+        )
+        self.logout_button.pack(side='left', padx=2)
         
         # Панель управления
         control_frame = tk.Frame(self.root, bg='#f0f0f0')
@@ -129,6 +283,36 @@ class BucketSortVisualizer:
         )
         self.reset_button.pack(side='left', padx=5)
         
+        # Кнопки сохранения и истории
+        save_frame = tk.LabelFrame(control_frame, text="История", bg='#f0f0f0', font=('Arial', 10))
+        save_frame.pack(side='left', padx=10)
+        
+        self.save_button = tk.Button(
+            save_frame,
+            text="💾 Сохранить",
+            command=self.save_sort_result,
+            bg='#9C27B0',
+            fg='white',
+            font=('Arial', 10),
+            padx=10,
+            pady=5,
+            state='disabled'
+        )
+        self.save_button.pack(side='left', padx=5)
+        
+        self.history_button = tk.Button(
+            save_frame,
+            text="📋 История",
+            command=self.show_history,
+            bg='#607D8B',
+            fg='white',
+            font=('Arial', 10),
+            padx=10,
+            pady=5,
+            state='disabled'
+        )
+        self.history_button.pack(side='left', padx=5)
+        
         # Скорость
         speed_frame = tk.LabelFrame(control_frame, text="Скорость", bg='#f0f0f0', font=('Arial', 10))
         speed_frame.pack(side='left', padx=10)
@@ -147,7 +331,7 @@ class BucketSortVisualizer:
         )
         speed_scale.pack()
         
-        # Информационная панель
+        # Информационная панель (видимость статуса системы)
         info_frame = tk.Frame(self.root, bg='#e0e0e0', relief='raised', bd=2)
         info_frame.pack(pady=10, fill='x', padx=20)
         
@@ -214,6 +398,222 @@ class BucketSortVisualizer:
         self.buckets_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
+        # Кнопка помощи (справка)
+        help_button = tk.Button(
+            self.root,
+            text="❓ Помощь",
+            command=self.show_help,
+            bg='#009688',
+            fg='white',
+            font=('Arial', 9),
+            padx=10,
+            pady=3
+        )
+        help_button.pack(side='bottom', pady=5)
+    
+    def update_auth_status(self):
+        """Обновляет статус авторизации в интерфейсе."""
+        if self.auth_manager.is_authenticated():
+            username = self.auth_manager.get_current_username()
+            self.auth_status_label.config(text=f"Пользователь: {username}", fg='#2E7D32')
+            self.login_button.config(state='disabled')
+            self.logout_button.config(state='normal')
+            self.history_button.config(state='normal')
+        else:
+            self.auth_status_label.config(text="Не авторизован", fg='#666')
+            self.login_button.config(state='normal')
+            self.logout_button.config(state='disabled')
+            self.history_button.config(state='disabled')
+    
+    def logout(self):
+        """Выполняет выход пользователя."""
+        self.auth_manager.logout()
+        self.update_auth_status()
+        messagebox.showinfo("Выход", "Вы вышли из системы")
+    
+    def save_sort_result(self):
+        """Сохраняет результат сортировки в базу данных."""
+        if not self.auth_manager.is_authenticated():
+            messagebox.showwarning("Предупреждение", "Необходимо авторизоваться для сохранения истории!")
+            self.show_login_dialog()
+            return
+        
+        if not self.original_array or self.sorted_array is None:
+            messagebox.showwarning("Предупреждение", "Сначала выполните сортировку!")
+            return
+        
+        user_id = self.auth_manager.get_current_user_id()
+        success, msg = self.auth_manager.db.save_sort_history(
+            user_id,
+            self.original_array,
+            self.sorted_array
+        )
+        
+        if success:
+            messagebox.showinfo("Успех", "Результат сохранен в историю!")
+        else:
+            messagebox.showerror("Ошибка", msg)
+    
+    def show_history(self):
+        """Показывает историю сортировок пользователя."""
+        if not self.auth_manager.is_authenticated():
+            messagebox.showwarning("Предупреждение", "Необходимо авторизоваться для просмотра истории!")
+            self.show_login_dialog()
+            return
+        
+        user_id = self.auth_manager.get_current_user_id()
+        history = self.auth_manager.db.get_sort_history(user_id)
+        
+        if not history:
+            messagebox.showinfo("История", "История сортировок пуста")
+            return
+        
+        # Создаем окно истории
+        history_window = tk.Toplevel(self.root)
+        history_window.title("История сортировок")
+        history_window.geometry("800x600")
+        history_window.configure(bg='#f0f0f0')
+        
+        # Заголовок
+        tk.Label(
+            history_window,
+            text=f"История сортировок ({len(history)} записей)",
+            font=('Arial', 14, 'bold'),
+            bg='#f0f0f0',
+            fg='#333'
+        ).pack(pady=10)
+        
+        # Прокручиваемая область
+        canvas = tk.Canvas(history_window, bg='white')
+        scrollbar = ttk.Scrollbar(history_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='white')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Отображаем историю
+        for idx, record in enumerate(history):
+            record_frame = tk.Frame(
+                scrollable_frame,
+                bg='#f5f5f5',
+                relief='raised',
+                bd=2
+            )
+            record_frame.pack(fill='x', padx=10, pady=5)
+            
+            tk.Label(
+                record_frame,
+                text=f"Запись #{len(history) - idx} | {record['created_at']}",
+                font=('Arial', 10, 'bold'),
+                bg='#f5f5f5'
+            ).pack(anchor='w', padx=10, pady=5)
+            
+            tk.Label(
+                record_frame,
+                text=f"Исходный: {record['original_array']}",
+                font=('Arial', 9),
+                bg='#f5f5f5',
+                anchor='w'
+            ).pack(fill='x', padx=10, pady=2)
+            
+            tk.Label(
+                record_frame,
+                text=f"Отсортированный: {record['sorted_array']}",
+                font=('Arial', 9),
+                bg='#f5f5f5',
+                anchor='w'
+            ).pack(fill='x', padx=10, pady=2)
+            
+            # Кнопка загрузки
+            def load_array(orig_arr, sorted_arr):
+                self.original_array = orig_arr
+                self.sorted_array = sorted_arr
+                self.reset_visualization()
+                self.start_button.config(state='normal')
+                history_window.destroy()
+                messagebox.showinfo("Успех", "Массив загружен!")
+            
+            tk.Button(
+                record_frame,
+                text="Загрузить",
+                command=lambda o=record['original_array'], s=record['sorted_array']: load_array(o, s),
+                bg='#4CAF50',
+                fg='white',
+                font=('Arial', 9),
+                padx=10,
+                pady=3
+            ).pack(anchor='e', padx=10, pady=5)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
+    def show_help(self):
+        """Показывает справку по использованию приложения."""
+        help_text = """
+ВИЗУАЛИЗАЦИЯ BUCKET SORT - СПРАВКА
+
+1. АВТОРИЗАЦИЯ:
+   - Нажмите "Войти" для входа в систему
+   - Используйте "Регистрация" для создания нового аккаунта
+   - Авторизация необходима для сохранения истории сортировок
+
+2. ВВОД ДАННЫХ:
+   - "Ввести массив" - ввод чисел с клавиатуры через пробел
+   - "Сгенерировать случайный" - автоматическая генерация массива
+   - "Загрузить из файла" - загрузка из текстового файла
+
+3. ВИЗУАЛИЗАЦИЯ:
+   - "▶ Начать" - запуск визуализации сортировки
+   - "⏸ Пауза" - приостановка визуализации
+   - "↻ Сброс" - сброс к начальному состоянию
+   - Регулятор скорости - изменение скорости анимации
+
+4. СОХРАНЕНИЕ И ИСТОРИЯ:
+   - "💾 Сохранить" - сохранение результата в историю (требуется авторизация)
+   - "📋 История" - просмотр сохраненных сортировок
+
+5. ПОМОЩЬ:
+   - Нажмите "❓ Помощь" для отображения этой справки
+
+Алгоритм Bucket Sort:
+- Распределяет элементы по "ведрам" на основе их значений
+- Сортирует каждое ведро отдельно
+- Объединяет отсортированные ведра в итоговый массив
+        """
+        
+        help_window = tk.Toplevel(self.root)
+        help_window.title("Справка")
+        help_window.geometry("600x500")
+        help_window.configure(bg='#f0f0f0')
+        
+        text_widget = tk.Text(
+            help_window,
+            wrap='word',
+            font=('Arial', 10),
+            bg='white',
+            padx=15,
+            pady=15
+        )
+        text_widget.pack(fill='both', expand=True, padx=10, pady=10)
+        text_widget.insert('1.0', help_text)
+        text_widget.config(state='disabled')
+        
+        tk.Button(
+            help_window,
+            text="Закрыть",
+            command=help_window.destroy,
+            bg='#4CAF50',
+            fg='white',
+            font=('Arial', 11),
+            padx=20,
+            pady=5
+        ).pack(pady=10)
+    
     def input_array(self):
         """Ввод массива с клавиатуры."""
         dialog = tk.Toplevel(self.root)
@@ -246,10 +646,11 @@ class BucketSortVisualizer:
                     )
                 else:
                     self.original_array = arr
+                    self.sorted_array = None
                     self.reset_visualization()
                     self.start_button.config(state='normal')
                     dialog.destroy()
-                    messagebox.showinfo("Успех", f"Массив загружен: {arr}")
+                    self.info_label.config(text=f"Массив загружен: {arr}")
             except ValueError:
                 messagebox.showerror("Ошибка", "Введите только целые числа!")
         
@@ -316,10 +717,11 @@ class BucketSortVisualizer:
                     messagebox.showerror("Ошибка", "Минимальное значение не может быть больше максимального!")
                 else:
                     self.original_array = [random.randint(min_val, max_val) for _ in range(size)]
+                    self.sorted_array = None
                     self.reset_visualization()
                     self.start_button.config(state='normal')
                     dialog.destroy()
-                    messagebox.showinfo("Успех", f"Сгенерирован массив из {size} элементов")
+                    self.info_label.config(text=f"Сгенерирован массив из {size} элементов")
             except ValueError:
                 messagebox.showerror("Ошибка", "Введите целые числа!")
         
@@ -381,9 +783,10 @@ class BucketSortVisualizer:
                         )
                     else:
                         self.original_array = numbers
+                        self.sorted_array = None
                         self.reset_visualization()
                         self.start_button.config(state='normal')
-                        messagebox.showinfo("Успех", f"Загружено {len(numbers)} элементов")
+                        self.info_label.config(text=f"Загружено {len(numbers)} элементов из файла")
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Ошибка при загрузке файла: {e}")
     
@@ -395,6 +798,8 @@ class BucketSortVisualizer:
         
         if self.steps_generator is None:
             self.steps_generator = bucket_sort_with_steps(self.original_array.copy())
+            # Выполняем сортировку для сохранения результата
+            self.sorted_array = bucket_sort(self.original_array.copy())
         
         self.is_playing = True
         self.start_button.config(state='disabled')
@@ -435,20 +840,14 @@ class BucketSortVisualizer:
         self.start_button.config(state='normal', text="▶ Начать")
         self.pause_button.config(state='disabled')
         self.reset_button.config(state='disabled')
+        self.save_button.config(state='disabled' if self.sorted_array is None else 'normal')
         self.clear_canvas()
         if self.original_array:
             self.info_label.config(text=f"Готов к визуализации. Массив: {self.original_array}")
     
     def update_speed(self, value):
-        """Обновляет скорость визуализации.
-        
-        Инвертированная логика: большее значение ползунка = быстрее (меньше задержка).
-        Формула: delay = 2050 - value
-        При value=50 -> delay=2000 (медленно)
-        При value=2000 -> delay=50 (быстро)
-        """
+        """Обновляет скорость визуализации."""
         slider_value = int(value)
-        # Инвертируем: больше значение = меньше задержка = быстрее
         self.speed = 2050 - slider_value
     
     def visualization_complete(self):
@@ -456,6 +855,8 @@ class BucketSortVisualizer:
         self.is_playing = False
         self.start_button.config(state='normal', text="▶ Начать")
         self.pause_button.config(state='disabled')
+        self.save_button.config(state='normal')
+        self.info_label.config(text=f"Сортировка завершена! Исходный: {self.original_array}, Отсортированный: {self.sorted_array}")
         messagebox.showinfo("Завершено", "Визуализация завершена!")
     
     def clear_canvas(self):
@@ -468,7 +869,7 @@ class BucketSortVisualizer:
         """Обновляет визуализацию на основе текущего состояния."""
         self.current_state = state
         
-        # Обновляем информацию
+        # Обновляем информацию (видимость статуса системы)
         self.info_label.config(text=f"Шаг {state['step']}: {state['description']}")
         
         # Очищаем canvas
@@ -589,4 +990,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
